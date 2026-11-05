@@ -1,0 +1,40 @@
+{
+  "name": "wms-app",
+  "version": "1.0.0",
+  "description": "نظام إدارة المخازن والمبيعات",
+  "main": "main.js",
+  "author": {
+    "name": "WMS",
+    "email": "wms@example.com"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^32.1.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.wms.desktop",
+    "productName": "WMS",
+    "files": ["main.js", "index.html", "package.json"],
+    "directories": { "output": "release" },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "نظام المخازن"
+    }
+  }
+}
