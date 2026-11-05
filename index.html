@@ -1,0 +1,1173 @@
+```html
+<!doctype html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<title>نظام إدارة المخازن - Pro</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#f1f5f9;color:#1e293b;direction:rtl;min-height:100vh}
+#app{display:flex;min-height:100vh}
+.sidebar{width:230px;background:#0f172a;color:#fff;padding:16px 10px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.sidebar h1{font-size:15px;margin-bottom:16px;padding:0 8px}
+.sidebar button{background:0;color:#cbd5e1;border:0;text-align:right;padding:9px 12px;border-radius:7px;font-size:13px;cursor:pointer;font-family:inherit}
+.sidebar button:hover{background:#1e293b;color:#fff}
+.sidebar button.active{background:#2563eb;color:#fff}
+.main{flex:1;padding:22px;overflow:auto;max-height:100vh}
+h2{margin-bottom:18px;font-size:20px}
+h3{font-size:16px;margin-bottom:12px}
+.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.form-row{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+input,select,button{font-family:inherit}
+input,select{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;background:#fff}
+input[type=date]{font-size:13px}
+.btn{padding:8px 16px;border:0;border-radius:7px;font-weight:600;font-size:13px;cursor:pointer;transition:.15s}
+.primary{background:#2563eb;color:#fff}.primary:hover{background:#1d4ed8}
+.success{background:#16a34a;color:#fff}.success:hover{background:#15803d}
+.danger{background:#dc2626;color:#fff}.danger:hover{background:#b91c1c}
+.warn{background:#d97706;color:#fff}.warn:hover{background:#b45309}
+.small-btn{padding:4px 10px;font-size:11px;border-radius:5px;border:0;cursor:pointer;color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f8fafc;padding:9px;text-align:right;font-weight:600;border-bottom:2px solid #e2e8f0}
+td{padding:7px 9px;border-bottom:1px solid #f1f5f9}
+tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600}
+.badge-red{background:#fee2e2;color:#991b1b}
+.badge-green{background:#dcfce7;color:#166534}
+.badge-blue{background:#dbeafe;color:#1e40af}
+.badge-yellow{background:#fef3c7;color:#92400e}
+.badge-gray{background:#f1f5f9;color:#475569}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1e3a8a,#0f172a);width:100%}
+.login-card{background:#fff;padding:40px;border-radius:16px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.login-card h1{text-align:center;margin-bottom:20px;font-size:18px}
+.login-card input{margin-bottom:12px;text-align:center;font-size:16px;padding:12px}
+.login-card button{width:100%;padding:12px}
+.error{color:#dc2626;text-align:center;font-size:13px;margin-bottom:12px;min-height:18px}
+.stat-label{font-size:12px;color:#64748b;margin-bottom:6px}
+.stat-value{font-size:22px;font-weight:700}
+.mono{font-variant-numeric:tabular-nums}
+.link{color:#2563eb;cursor:pointer;background:0;border:0;font-size:13px;padding:0}
+.link:hover{text-decoration:underline}
+.w24{width:85px;text-align:center;padding:5px}
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:7px 14px;border-radius:7px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:13px}
+.tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
+.bar{height:22px;background:#2563eb;border-radius:4px;transition:.3s;min-width:2px}
+.pivot-row{display:grid;grid-template-columns:180px 1fr 80px;gap:10px;align-items:center;margin-bottom:6px;font-size:13px}
+@media print{.sidebar,.no-print,h2,.link,.btn,.tabs{display:none!important}.main{padding:0}.card{box-shadow:none}}
+@media(max-width:900px){.g4,.g3{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+
+// ==================== DATABASE ====================
+let db=null;
+const DB_NAME='wms_pro_v1',DB_VER=1;
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB_NAME,DB_VER);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      ['settings','warehouses','products','customers','suppliers','invoices','invoice_items','payments','movements'].forEach(s=>{
+        if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id',autoIncrement:true});
+      });
+      if(!d.objectStoreNames.contains('stock'))d.createObjectStore('stock',{keyPath:'key'});
+    };
+    r.onsuccess=()=>{db=r.result;res()};
+    r.onerror=()=>rej(r.error);
+  });
+}
+function store(n,m='readonly'){return db.transaction(n,m).objectStore(n)}
+function p(r){return new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function req(n,k){return p(store(n).get(k))}
+function all(n){return p(store(n).getAll())}
+function add(n,v){return p(store(n,'readwrite').add(v))}
+function put(n,v){return p(store(n,'readwrite').put(v))}
+
+// ==================== UTILS ====================
+const now=()=>new Date().toISOString();
+const money=n=>Number(n||0).toFixed(2);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+const dateStr=s=>s?new Date(s).toLocaleDateString('ar-EG'):'—';
+const dateTimeStr=s=>s?new Date(s).toLocaleString('ar-EG'):'—';
+
+async function setting(k,d=''){const r=await req('settings',k);return r?r.value:d}
+async function setSetting(k,v){await put('settings',{key:k,value:v})}
+
+async function getStock(pid,wid){const r=await req('stock',pid+'_'+wid);return r?r.quantity:0}
+async function updateStock(pid,wid,delta){
+  const key=pid+'_'+wid;
+  const s=await req('stock',key);
+  if(s) await put('stock',{...s,quantity:s.quantity+delta});
+  else await put('stock',{key,productId:pid,warehouseId:wid,quantity:delta});
+}
+
+function genNum(type){
+  const d=new Date();const ym=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0');
+  const prefix={SALE:'SALE',PURCHASE:'PURC',SALE_RETURN:'SRET',PURCHASE_RETURN:'PRET'}[type];
+  const rand=String(Math.floor(Math.random()*9999)+1).padStart(4,'0');
+  return `${prefix}-${ym}-${rand}`;
+}
+
+// ==================== SEED ====================
+async function seed(){
+  if(await setting('seeded'))return;
+  await setSetting('password','admin');
+  await setSetting('company','شركتي');
+  await setSetting('currency','ج.م');
+  await setSetting('seeded','1');
+  await add('warehouses',{name:'المخزن الرئيسي',code:'MAIN',address:'',created_at:now()});
+}
+
+// ==================== AUTH ====================
+async function login(pass){return (await setting('password'))===pass}
+async function changePass(v){await setSetting('password',v)}
+
+// ==================== INVOICE ENGINE ====================
+async function createInvoice(data){
+  const isOut = data.type==='SALE' || data.type==='PURCHASE_RETURN';
+  if(isOut){
+    for(const it of data.items){
+      const av=await getStock(it.productId,data.warehouseId);
+      if(av<it.quantity){
+        const pr=await req('products',it.productId);
+        throw new Error(`المخزون غير كافٍ: ${pr.name} (المتاح ${av})`);
+      }
+    }
+  }
+  if(!data.items.length) throw new Error('أضف صنفًا واحدًا على الأقل');
+
+  const calc=data.items.map(i=>({...i,line:+(i.quantity*i.unitPrice-i.discount).toFixed(2)}));
+  const subtotal=+calc.reduce((s,i)=>s+i.line,0).toFixed(2);
+  const taxable=Math.max(subtotal-(data.discount||0),0);
+  const tax=+(taxable*(data.taxRate||0)/100).toFixed(2);
+  const total=+(taxable+tax).toFixed(2);
+  const paid=Math.min(data.paid||0,total);
+  const due=+(total-paid).toFixed(2);
+  const number=genNum(data.type);
+  const partnerType=(data.type==='SALE'||data.type==='SALE_RETURN')?'customer':'supplier';
+
+  const invId=await add('invoices',{
+    number,type:data.type,status:'CONFIRMED',
+    partnerType,partnerId:data.partnerId||null,
+    warehouseId:data.warehouseId,
+    subtotal,discount:data.discount||0,tax,total,paid,note:data.note||'',
+    created_at:now()
+  });
+
+  for(const it of calc){
+    let cost=0;
+    if(data.type==='SALE'||data.type==='SALE_RETURN'){
+      const pr=await req('products',it.productId);
+      cost=pr.cost||0;
+    }
+    await add('invoice_items',{
+      invoiceId:invId,productId:it.productId,
+      quantity:it.quantity,unitPrice:it.unitPrice,discount:it.discount||0,total:it.line,cost
+    });
+    const sign=isOut?-1:1;
+    await updateStock(it.productId,data.warehouseId,sign*it.quantity);
+    await add('movements',{
+      productId:it.productId,warehouseId:data.warehouseId,
+      type:sign<0?'OUT':'IN',quantity:it.quantity,reference:number,
+      reason:data.type,created_at:now()
+    });
+  }
+
+  if(data.type==='PURCHASE'&&data.updateCost){
+    for(const it of calc){
+      const pr=await req('products',it.productId);
+      await put('products',{...pr,cost:it.unitPrice});
+    }
+  }
+
+  if(due>0&&data.partnerId){
+    if(data.type==='SALE'){
+      const c=await req('customers',data.partnerId);
+      await put('customers',{...c,balance:(c.balance||0)+due});
+    } else if(data.type==='PURCHASE'){
+      const s=await req('suppliers',data.partnerId);
+      await put('suppliers',{...s,balance:(s.balance||0)+due});
+    } else if(data.type==='SALE_RETURN'){
+      const c=await req('customers',data.partnerId);
+      await put('customers',{...c,balance:(c.balance||0)-due});
+    } else if(data.type==='PURCHASE_RETURN'){
+      const s=await req('suppliers',data.partnerId);
+      await put('suppliers',{...s,balance:(s.balance||0)-due});
+    }
+  }
+
+  if(paid>0){
+    await add('payments',{
+      invoiceId:invId,amount:paid,method:data.paymentMethod||'CASH',
+      partnerType,partnerId:data.partnerId||null,
+      note:'دفعة أولى',created_at:now()
+    });
+  }
+
+  return {id:invId,number};
+}
+
+async function addPayment(invoiceId,amount,method,note){
+  const inv=await req('invoices',invoiceId);
+  const remaining=inv.total-inv.paid;
+  if(amount<=0) throw new Error('المبلغ يجب أن يكون موجبًا');
+  if(amount>remaining+0.01) throw new Error(`المبلغ أكبر من المتبقي (${money(remaining)})`);
+
+  await add('payments',{
+    invoiceId,amount,method:method||'CASH',
+    partnerType:inv.partnerType,partnerId:inv.partnerId,
+    note:note||'',created_at:now()
+  });
+  await put('invoices',{...inv,paid:inv.paid+amount});
+
+  if(inv.partnerId){
+    if(inv.type==='SALE'){
+      const c=await req('customers',inv.partnerId);
+      await put('customers',{...c,balance:(c.balance||0)-amount});
+    } else if(inv.type==='PURCHASE'){
+      const s=await req('suppliers',inv.partnerId);
+      await put('suppliers',{...s,balance:(s.balance||0)-amount});
+    } else if(inv.type==='SALE_RETURN'){
+      const c=await req('customers',inv.partnerId);
+      await put('customers',{...c,balance:(c.balance||0)+amount});
+    } else if(inv.type==='PURCHASE_RETURN'){
+      const s=await req('suppliers',inv.partnerId);
+      await put('suppliers',{...s,balance:(s.balance||0)+amount});
+    }
+  }
+}
+
+// ==================== TRANSFER & ADJUST ====================
+async function transferStock(fromId,toId,items,note){
+  if(fromId===toId) throw new Error('المخزنان متطابقان');
+  for(const it of items){
+    const av=await getStock(it.productId,fromId);
+    if(av<it.quantity){
+      const pr=await req('products',it.productId);
+      throw new Error(`المخزون غير كافٍ: ${pr.name} (المتاح ${av})`);
+    }
+  }
+  const ref='TRF-'+Date.now();
+  for(const it of items){
+    await updateStock(it.productId,fromId,-it.quantity);
+    await add('movements',{productId:it.productId,warehouseId:fromId,type:'OUT',quantity:it.quantity,reference:ref,reason:'TRANSFER',note:note||'',created_at:now()});
+    await updateStock(it.productId,toId,it.quantity);
+    await add('movements',{productId:it.productId,warehouseId:toId,type:'IN',quantity:it.quantity,reference:ref,reason:'TRANSFER',note:note||'',created_at:now()});
+  }
+  return ref;
+}
+
+async function adjustStock(productId,warehouseId,newQty,note){
+  const current=await getStock(productId,warehouseId);
+  const delta=newQty-current;
+  if(delta===0) return;
+  await updateStock(productId,warehouseId,delta);
+  await add('movements',{
+    productId,warehouseId,type:'ADJUST',quantity:Math.abs(delta),
+    reference:delta>0?'ADJ+':'ADJ-',
+    reason:'ADJUST',note:note||`من ${current} إلى ${newQty}`,
+    created_at:now()
+  });
+}
+
+// ==================== REPORTS ====================
+async function getDashboard(){
+  const invoices=await all('invoices');
+  const products=await all('products');
+  const customers=await all('customers');
+  const suppliers=await all('suppliers');
+  const stock=await all('stock');
+  const t=today();
+
+  const salesToday=invoices.filter(i=>i.type==='SALE'&&i.created_at.slice(0,10)===t);
+  const salesTotal=salesToday.reduce((s,i)=>s+i.total,0);
+
+  const lowStock=[];
+  for(const p of products.filter(x=>x.active!==0)){
+    const q=stock.filter(s=>s.productId===p.id).reduce((s,x)=>s+x.quantity,0);
+    if(q<=(p.reorder||0)) lowStock.push({id:p.id,name:p.name,stock:q,reorder:p.reorder||0});
+  }
+
+  const recent=invoices.filter(i=>i.type==='SALE').sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,5);
+  const recentFull=[];
+  for(const i of recent){
+    const c=i.partnerId?await req('customers',i.partnerId):null;
+    recentFull.push({number:i.number,customer:c?c.name:'نقدي',total:i.total,id:i.id});
+  }
+
+  const receivables=customers.reduce((s,c)=>s+(c.balance>0?c.balance:0),0);
+  const payables=suppliers.reduce((s,c)=>s+(c.balance>0?c.balance:0),0);
+
+  return {salesToday:salesTotal,invoiceCount:salesToday.length,products:products.filter(p=>p.active!==0).length,customers:customers.length,lowStock,recent:recentFull,receivables,payables};
+}
+
+async function getReport(fromDate,toDate){
+  const invoices=await all('invoices');
+  const items=await all('invoice_items');
+  const products=await all('products');
+  const customers=await all('customers');
+  const stock=await all('stock');
+
+  const inRange=invoices.filter(i=>{
+    const d=i.created_at.slice(0,10);
+    return d>=fromDate && d<=toDate;
+  });
+  const sales=inRange.filter(i=>i.type==='SALE');
+  const purchases=inRange.filter(i=>i.type==='PURCHASE');
+  const sReturns=inRange.filter(i=>i.type==='SALE_RETURN');
+  const pReturns=inRange.filter(i=>i.type==='PURCHASE_RETURN');
+
+  const revenue=sales.reduce((s,i)=>s+i.total,0)-sReturns.reduce((s,i)=>s+i.total,0);
+  const purchasesTotal=purchases.reduce((s,i)=>s+i.total,0);
+
+  const inRangeIds=new Set(inRange.map(i=>i.id));
+  const relevantItems=items.filter(it=>inRangeIds.has(it.invoiceId));
+  let cogs=0,profit=0;
+  for(const it of relevantItems){
+    const inv=inRange.find(i=>i.id===it.invoiceId);
+    if(!inv) continue;
+    if(inv.type==='SALE'){cogs+=it.cost*it.quantity;profit+=it.total-it.cost*it.quantity}
+    else if(inv.type==='SALE_RETURN'){cogs-=it.cost*it.quantity;profit-=it.total-it.cost*it.quantity}
+  }
+
+  const pm=Object.fromEntries(products.map(p=>[p.id,p]));
+  const prodMap={};
+  for(const it of relevantItems){
+    const inv=inRange.find(i=>i.id===it.invoiceId);
+    if(!inv||inv.type!=='SALE') continue;
+    if(!prodMap[it.productId]) prodMap[it.productId]={name:pm[it.productId]?.name||'—',qty:0,revenue:0};
+    prodMap[it.productId].qty+=it.quantity;
+    prodMap[it.productId].revenue+=it.total;
+  }
+  const topProducts=Object.values(prodMap).sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+
+  const cm=Object.fromEntries(customers.map(c=>[c.id,c]));
+  const custMap={};
+  for(const inv of sales){
+    if(!inv.partnerId) continue;
+    if(!custMap[inv.partnerId]) custMap[inv.partnerId]={name:cm[inv.partnerId]?.name||'—',count:0,total:0};
+    custMap[inv.partnerId].count++;
+    custMap[inv.partnerId].total+=inv.total;
+  }
+  const topCustomers=Object.values(custMap).sort((a,b)=>b.total-a.total).slice(0,10);
+
+  const aging={a30:0,a60:0,a90:0,a90p:0};
+  const today0=new Date();today0.setHours(0,0,0,0);
+  for(const inv of invoices.filter(i=>i.type==='SALE'&&(i.total-i.paid)>0.01)){
+    const days=Math.floor((today0-new Date(inv.created_at))/86400000);
+    const bal=inv.total-inv.paid;
+    if(days<=30) aging.a30+=bal;
+    else if(days<=60) aging.a60+=bal;
+    else if(days<=90) aging.a90+=bal;
+    else aging.a90p+=bal;
+  }
+
+  const warehouses=await all('warehouses');
+  const wm=Object.fromEntries(warehouses.map(w=>[w.id,w.name]));
+  const invByWh={};
+  for(const s of stock){
+    if(!wm[s.warehouseId]) continue;
+    if(!invByWh[s.warehouseId]) invByWh[s.warehouseId]={name:wm[s.warehouseId],value:0,items:0};
+    invByWh[s.warehouseId].value+=s.quantity*(pm[s.productId]?.cost||0);
+    invByWh[s.warehouseId].items++;
+  }
+
+  const low=[];
+  for(const p of products.filter(x=>x.active!==0)){
+    const q=stock.filter(s=>s.productId===p.id).reduce((s,x)=>s+x.quantity,0);
+    if(q<=(p.reorder||0)) low.push({name:p.name,stock:q,reorder:p.reorder||0});
+  }
+
+  return {
+    revenue,cogs,profit,purchases:purchasesTotal,
+    invoiceCount:sales.length,
+    topProducts,topCustomers,aging,
+    inventoryByWarehouse:Object.values(invByWh),
+    lowStock:low,
+  };
+}
+
+// ==================== STATE ====================
+const state={authed:false,page:'dashboard',param:null};
+function goto(p,param=null){state.page=p;state.param=param;render()}
+
+// ==================== LOGIN & SHELL ====================
+function renderLogin(){
+  document.getElementById('app').innerHTML=`<div class="login-wrap"><div class="login-card">
+    <h1>📦 نظام إدارة المخازن</h1>
+    <div id="err" class="error"></div>
+    <input id="pass" type="password" placeholder="كلمة المرور" autofocus>
+    <button class="btn primary" onclick="doLogin()">دخول</button>
+    <p style="margin-top:14px;font-size:12px;color:#94a3b8;text-align:center">افتراضي: <b>admin</b></p>
+  </div></div>`;
+  document.getElementById('pass').addEventListener('keypress',e=>{if(e.key==='Enter')doLogin()});
+}
+async function doLogin(){
+  const v=document.getElementById('pass').value;
+  if(await login(v)){state.authed=true;state.page='dashboard';render()}
+  else document.getElementById('err').textContent='كلمة المرور غير صحيحة';
+}
+
+const MENU=[
+  {k:'dashboard',l:'📊 لوحة التحكم'},
+  {k:'invoices',l:'🧾 الفواتير'},
+  {k:'payments-page',l:'💵 المدفوعات'},
+  {k:'transfers-page',l:'🔄 تحويل وتسوية'},
+  {k:'products',l:'📦 المنتجات'},
+  {k:'warehouses',l:'🏪 المخازن'},
+  {k:'customers',l:'👥 العملاء'},
+  {k:'suppliers',l:'🏭 الموردون'},
+  {k:'movements-page',l:'📋 حركات المخزون'},
+  {k:'reports',l:'📈 التقارير'},
+  {k:'settings',l:'⚙️ الإعدادات'},
+];
+
+function render(){
+  if(!state.authed){renderLogin();return}
+  document.getElementById('app').innerHTML=`
+    <aside class="sidebar">
+      <h1>📦 WMS-Pro</h1>
+      ${MENU.map(m=>`<button class="${state.page===m.k?'active':''}" onclick="goto('${m.k}')">${m.l}</button>`).join('')}
+      <div style="flex:1"></div>
+      <button onclick="logout()">🚪 خروج</button>
+    </aside>
+    <main class="main" id="pc"></main>`;
+  renderPage();
+}
+function logout(){state.authed=false;render()}
+
+function renderPage(){
+  const el=document.getElementById('pc');if(!el)return;
+  const p=state.page;
+  if(p==='dashboard') return renderDashboard(el);
+  if(p==='products') return renderProducts(el);
+  if(p==='warehouses') return renderWarehouses(el);
+  if(p==='customers') return renderCustomers(el);
+  if(p==='suppliers') return renderSuppliers(el);
+  if(p==='invoices') return renderInvoices(el);
+  if(p==='new-invoice') return renderNewInvoice(el);
+  if(p==='invoice-view') return renderInvoiceView(el);
+  if(p==='payments-page') return renderPaymentsPage(el);
+  if(p==='transfers-page') return renderTransfersPage(el);
+  if(p==='movements-page') return renderMovementsPage(el);
+  if(p==='reports') return renderReports(el);
+  if(p==='settings') return renderSettings(el);
+}
+
+// ==================== DASHBOARD ====================
+async function renderDashboard(el){
+  const d=await getDashboard();
+  el.innerHTML=`<h2>لوحة التحكم</h2>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card"><div class="stat-label">مبيعات اليوم</div><div class="stat-value mono">${money(d.salesToday)}</div></div>
+    <div class="card"><div class="stat-label">فواتير اليوم</div><div class="stat-value">${d.invoiceCount}</div></div>
+    <div class="card"><div class="stat-label">مستحقات لنا</div><div class="stat-value mono" style="color:#dc2626">${money(d.receivables)}</div></div>
+    <div class="card"><div class="stat-label">مستحقات علينا</div><div class="stat-value mono" style="color:#d97706">${money(d.payables)}</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>أحدث الفواتير</h3><table><tbody>
+      ${d.recent.length?d.recent.map(r=>`<tr><td class="mono">${esc(r.number)}</td><td>${esc(r.customer)}</td><td class="mono" style="text-align:left">${money(r.total)}</td><td><button class="link" onclick="goto('invoice-view',${r.id})">عرض</button></td></tr>`).join(''):'<tr><td style="text-align:center;color:#94a3b8;padding:16px">لا توجد</td></tr>'}
+    </tbody></table></div>
+    <div class="card"><h3 style="color:#dc2626">تنبيهات النقص</h3><table><tbody>
+      ${d.lowStock.length?d.lowStock.map(p=>`<tr><td>${esc(p.name)}</td><td style="text-align:left"><span class="badge badge-red">${p.stock}/${p.reorder}</span></td></tr>`).join(''):'<tr><td style="text-align:center;color:#16a34a;padding:16px">كل المنتجات متوفرة ✓</td></tr>'}
+    </tbody></table></div>
+  </div>
+  <div class="card" style="margin-top:14px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+    <button class="btn primary" onclick="goto('new-invoice','SALE')">🧾 فاتورة بيع</button>
+    <button class="btn warn" onclick="goto('new-invoice','PURCHASE')">🛒 فاتورة شراء</button>
+    <button class="btn danger" onclick="goto('new-invoice','SALE_RETURN')">↩️ مرتجع بيع</button>
+    <button class="btn danger" onclick="goto('new-invoice','PURCHASE_RETURN')">↩️ مرتجع شراء</button>
+  </div>`;
+}
+
+// ==================== PRODUCTS ====================
+async function renderProducts(el){
+  const list=(await all('products')).filter(p=>p.active!==0);
+  const stock=await all('stock');
+  el.innerHTML=`<div class="hdr"><h2>المنتجات (${list.length})</h2></div>
+  <form class="card form-row" onsubmit="event.preventDefault();addProduct()" style="margin-bottom:14px">
+    <input id="p-sku" placeholder="SKU *" required>
+    <input id="p-name" placeholder="اسم المنتج *" required>
+    <input id="p-unit" placeholder="الوحدة" value="قطعة">
+    <input id="p-cost" type="number" step="0.01" placeholder="التكلفة" value="0">
+    <input id="p-price" type="number" step="0.01" placeholder="سعر البيع" value="0">
+    <input id="p-tax" type="number" step="0.01" placeholder="ضريبة %" value="0">
+    <input id="p-reorder" type="number" placeholder="حد الطلب" value="0">
+    <button class="btn primary">إضافة</button>
+  </form>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>الاسم</th><th>SKU</th><th>التكلفة</th><th>سعر البيع</th><th>الرصيد</th><th>هامش</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(p=>{
+      const q=stock.filter(s=>s.productId===p.id).reduce((a,x)=>a+x.quantity,0);
+      const margin=p.price>0?((p.price-p.cost)/p.price*100).toFixed(0):0;
+      return `<tr>
+        <td>${esc(p.name)}</td>
+        <td class="mono">${esc(p.sku)}</td>
+        <td class="mono">${money(p.cost)}</td>
+        <td class="mono">${money(p.price)}</td>
+        <td class="mono">${q<=(p.reorder||0)?`<span class="badge badge-red">${q}</span>`:`<span class="badge badge-green">${q}</span>`}</td>
+        <td class="mono">${margin}%</td>
+        <td><button class="small-btn danger" onclick="delProduct(${p.id})">حذف</button></td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="7" style="text-align:center;padding:16px;color:#94a3b8">لا منتجات</td></tr>'}
+    </tbody></table></div>`;
+}
+async function addProduct(){
+  const sku=document.getElementById('p-sku').value.trim();
+  const name=document.getElementById('p-name').value.trim();
+  if(!sku||!name)return alert('SKU والاسم مطلوبان');
+  if((await all('products')).find(p=>p.sku===sku))return alert('SKU مستخدم');
+  await add('products',{
+    sku,name,
+    unit:document.getElementById('p-unit').value||'قطعة',
+    cost:+document.getElementById('p-cost').value||0,
+    price:+document.getElementById('p-price').value||0,
+    tax:+document.getElementById('p-tax').value||0,
+    reorder:+document.getElementById('p-reorder').value||0,
+    active:1,created_at:now()
+  });
+  renderPage();
+}
+async function delProduct(id){
+  if(!confirm('حذف المنتج؟'))return;
+  const p=await req('products',id);
+  await put('products',{...p,active:0});renderPage();
+}
+
+// ==================== WAREHOUSES ====================
+async function renderWarehouses(el){
+  const list=await all('warehouses');
+  el.innerHTML=`<h2>المخازن (${list.length})</h2>
+  <form class="card form-row" onsubmit="event.preventDefault();addWarehouse()" style="margin-bottom:14px">
+    <input id="w-name" placeholder="اسم المخزن *" required>
+    <input id="w-code" placeholder="الكود *" required>
+    <input id="w-address" placeholder="العنوان">
+    <button class="btn primary">إضافة</button>
+  </form>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>الاسم</th><th>الكود</th><th>العنوان</th></tr></thead>
+    <tbody>${list.map(w=>`<tr><td>${esc(w.name)}</td><td class="mono">${esc(w.code)}</td><td>${esc(w.address)||'—'}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+async function addWarehouse(){
+  const n=document.getElementById('w-name').value.trim();
+  const c=document.getElementById('w-code').value.trim();
+  if(!n||!c)return alert('الاسم والكود مطلوبان');
+  await add('warehouses',{name:n,code:c,address:document.getElementById('w-address').value.trim(),created_at:now()});
+  renderPage();
+}
+
+// ==================== CUSTOMERS ====================
+async function renderCustomers(el){
+  const list=await all('customers');
+  const invoices=await all('invoices');
+  el.innerHTML=`<h2>العملاء (${list.length})</h2>
+  <form class="card form-row" onsubmit="event.preventDefault();addCustomer()" style="margin-bottom:14px">
+    <input id="c-name" placeholder="الاسم *" required>
+    <input id="c-phone" placeholder="الهاتف">
+    <input id="c-email" placeholder="البريد">
+    <input id="c-address" placeholder="العنوان">
+    <button class="btn primary">إضافة</button>
+  </form>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>الاسم</th><th>الهاتف</th><th>الرصيد</th><th>عدد الفواتير</th></tr></thead>
+    <tbody>${list.length?list.map(c=>{
+      const cnt=invoices.filter(i=>i.partnerType==='customer'&&i.partnerId===c.id).length;
+      return `<tr>
+        <td>${esc(c.name)}</td>
+        <td>${esc(c.phone)||'—'}</td>
+        <td class="mono" style="color:${(c.balance||0)>0?'#dc2626':'#16a34a'}">${money(c.balance)}</td>
+        <td>${cnt}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="4" style="text-align:center;padding:16px;color:#94a3b8">لا عملاء</td></tr>'}
+    </tbody></table></div>`;
+}
+async function addCustomer(){
+  const n=document.getElementById('c-name').value.trim();
+  if(!n)return alert('الاسم مطلوب');
+  await add('customers',{name:n,phone:document.getElementById('c-phone').value.trim(),email:document.getElementById('c-email').value.trim(),address:document.getElementById('c-address').value.trim(),balance:0,created_at:now()});
+  renderPage();
+}
+
+// ==================== SUPPLIERS ====================
+async function renderSuppliers(el){
+  const list=await all('suppliers');
+  const invoices=await all('invoices');
+  el.innerHTML=`<h2>الموردون (${list.length})</h2>
+  <form class="card form-row" onsubmit="event.preventDefault();addSupplier()" style="margin-bottom:14px">
+    <input id="s-name" placeholder="الاسم *" required>
+    <input id="s-phone" placeholder="الهاتف">
+    <input id="s-email" placeholder="البريد">
+    <input id="s-address" placeholder="العنوان">
+    <button class="btn primary">إضافة</button>
+  </form>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>الاسم</th><th>الهاتف</th><th>الرصيد (مستحق له)</th><th>عدد الفواتير</th></tr></thead>
+    <tbody>${list.length?list.map(s=>{
+      const cnt=invoices.filter(i=>i.partnerType==='supplier'&&i.partnerId===s.id).length;
+      return `<tr>
+        <td>${esc(s.name)}</td>
+        <td>${esc(s.phone)||'—'}</td>
+        <td class="mono" style="color:${(s.balance||0)>0?'#d97706':'#16a34a'}">${money(s.balance)}</td>
+        <td>${cnt}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="4" style="text-align:center;padding:16px;color:#94a3b8">لا موردين</td></tr>'}
+    </tbody></table></div>`;
+}
+async function addSupplier(){
+  const n=document.getElementById('s-name').value.trim();
+  if(!n)return alert('الاسم مطلوب');
+  await add('suppliers',{name:n,phone:document.getElementById('s-phone').value.trim(),email:document.getElementById('s-email').value.trim(),address:document.getElementById('s-address').value.trim(),balance:0,created_at:now()});
+  renderPage();
+}
+
+// ==================== INVOICES LIST ====================
+let invFilter='SALE';
+async function renderInvoices(el){
+  const invoices=await all('invoices');
+  const customers=Object.fromEntries((await all('customers')).map(c=>[c.id,c.name]));
+  const suppliers=Object.fromEntries((await all('suppliers')).map(s=>[s.id,s.name]));
+  const list=invoices.filter(i=>i.type===invFilter).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  const typeLabel={SALE:'مبيعات',PURCHASE:'مشتريات',SALE_RETURN:'مرتجع بيع',PURCHASE_RETURN:'مرتجع شراء'};
+  el.innerHTML=`<div class="hdr">
+    <h2>الفواتير</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn primary" onclick="goto('new-invoice','SALE')">+ بيع</button>
+      <button class="btn warn" onclick="goto('new-invoice','PURCHASE')">+ شراء</button>
+      <button class="btn danger" onclick="goto('new-invoice','SALE_RETURN')">+ مرتجع بيع</button>
+      <button class="btn danger" onclick="goto('new-invoice','PURCHASE_RETURN')">+ مرتجع شراء</button>
+    </div>
+  </div>
+  <div class="tabs">
+    ${['SALE','PURCHASE','SALE_RETURN','PURCHASE_RETURN'].map(t=>`<button class="tab ${invFilter===t?'active':''}" onclick="invFilter='${t}';renderPage()">${typeLabel[t]}</button>`).join('')}
+  </div>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>الرقم</th><th>الطرف</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>التاريخ</th><th></th></tr></thead>
+    <tbody>${list.length?list.map(i=>{
+      const partnerName=(i.partnerType==='customer'?customers[i.partnerId]:suppliers[i.partnerId])||'—';
+      return `<tr>
+        <td class="mono">${esc(i.number)}</td>
+        <td>${esc(partnerName)}</td>
+        <td class="mono">${money(i.total)}</td>
+        <td class="mono">${money(i.paid)}</td>
+        <td class="mono" style="color:${i.total-i.paid>0.01?'#dc2626':'#16a34a'}">${money(i.total-i.paid)}</td>
+        <td>${dateStr(i.created_at)}</td>
+        <td><button class="link" onclick="goto('invoice-view',${i.id})">عرض</button></td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">لا فواتير من هذا النوع</td></tr>'}
+    </tbody></table></div>`;
+}
+
+// ==================== NEW INVOICE ====================
+let invForm=null;
+async function renderNewInvoice(el){
+  const type=state.param||'SALE';
+  const [customers,suppliers,warehouses,products]=await Promise.all([
+    all('customers'),all('suppliers'),all('warehouses'),all('products').then(arr=>arr.filter(p=>p.active!==0))
+  ]);
+  window._ctx={customers,suppliers,warehouses,products,type};
+  invForm={partnerId:'',warehouseId:warehouses[0]?.id||'',discount:0,taxRate:0,paid:0,note:'',paymentMethod:'CASH',updateCost:false,
+    items:[{productId:'',quantity:1,unitPrice:0,discount:0}]};
+  const isSale=type==='SALE'||type==='SALE_RETURN';
+  const isPurchase=type==='PURCHASE'||type==='PURCHASE_RETURN';
+  const labels={SALE:'فاتورة بيع',PURCHASE:'فاتورة شراء',SALE_RETURN:'مرتجع بيع',PURCHASE_RETURN:'مرتجع شراء'};
+  const partnerLabel=isSale?'العميل':'المورد';
+  const paidLabel={SALE:'المدفوع من العميل',PURCHASE:'المدفوع للمورد',SALE_RETURN:'المبلغ المرتجع',PURCHASE_RETURN:'المبلغ المستلم'}[type];
+
+  el.innerHTML=`<button class="link no-print" onclick="goto('invoices')">← رجوع</button>
+  <h2 style="margin-top:10px">${labels[type]}</h2>
+  <div id="inv-err"></div>
+  <div class="card form-row" style="margin-bottom:14px">
+    <div><label style="font-size:12px;color:#64748b">${partnerLabel}</label>
+      <select id="iv-partner" onchange="invForm.partnerId=+this.value">
+        <option value="">— ${isSale?'نقدي':'اختر'} —</option>
+        ${(isSale?customers:suppliers).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+      </select></div>
+    <div><label style="font-size:12px;color:#64748b">المخزن *</label>
+      <select id="iv-wh" onchange="invForm.warehouseId=+this.value">
+        ${warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+      </select></div>
+    <div><label style="font-size:12px;color:#64748b">ملاحظة</label>
+      <input oninput="invForm.note=this.value"></div>
+    ${type==='PURCHASE'?`<div><label style="font-size:12px;color:#64748b">تحديث التكلفة؟</label>
+      <select onchange="invForm.updateCost=this.value==='y'">
+        <option value="n">لا</option><option value="y">نعم (سعر الشراء)</option>
+      </select></div>`:''}
+  </div>
+
+  <div class="card" style="padding:0;margin-bottom:14px"><table>
+    <thead><tr><th>المنتج</th><th>الكمية</th><th>السعر</th><th>خصم</th><th>الإجمالي</th><th></th></tr></thead>
+    <tbody id="inv-rows"></tbody>
+  </table>
+  <div style="padding:10px"><button type="button" class="link" onclick="addInvRow()">➕ إضافة صنف</button></div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>المجموع:</span><span class="mono" id="iv-sub">0.00</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>خصم:</span>
+        <input style="width:120px" type="number" step="0.01" value="0" oninput="invForm.discount=+this.value||0;updateInv()"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>ضريبة %:</span>
+        <input style="width:120px" type="number" step="0.01" value="0" oninput="invForm.taxRate=+this.value||0;updateInv()"></div>
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:17px;padding-top:8px;border-top:1px solid #e2e8f0"><span>الإجمالي:</span><span class="mono" id="iv-total">0.00</span></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>${paidLabel}:</span>
+        <input style="width:130px" type="number" step="0.01" value="0" oninput="invForm.paid=+this.value||0;updateInv()"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>طريقة الدفع:</span>
+        <select style="width:130px" onchange="invForm.paymentMethod=this.value">
+          <option value="CASH">نقدي</option><option value="CARD">بطاقة</option>
+          <option value="TRANSFER">تحويل</option><option value="CREDIT">آجل</option>
+        </select></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:14px"><span>المتبقي:</span><span class="mono" id="iv-due">0.00</span></div>
+      <button class="btn success" style="width:100%" onclick="saveInvoice()">💾 حفظ الفاتورة</button>
+    </div>
+  </div>`;
+  drawInvRows();
+}
+
+function drawInvRows(){
+  const tbody=document.getElementById('inv-rows');if(!tbody)return;
+  const products=window._ctx.products;
+  tbody.innerHTML=invForm.items.map((it,i)=>{
+    const line=+(it.quantity*it.unitPrice-it.discount).toFixed(2);
+    return `<tr>
+      <td><select onchange="pickProduct(${i},this.value)"><option value="">— اختر —</option>
+        ${products.map(p=>`<option value="${p.id}" ${it.productId==p.id?'selected':''}>${esc(p.name)}</option>`).join('')}
+      </select></td>
+      <td><input class="w24" type="number" min="0.001" step="0.001" value="${it.quantity}" onchange="updItem(${i},'quantity',+this.value)"></td>
+      <td><input class="w24" type="number" step="0.01" value="${it.unitPrice}" onchange="updItem(${i},'unitPrice',+this.value)"></td>
+      <td><input class="w24" type="number" step="0.01" value="${it.discount}" onchange="updItem(${i},'discount',+this.value)"></td>
+      <td class="mono" style="text-align:center">${line.toFixed(2)}</td>
+      <td><button class="small-btn danger" onclick="delInvRow(${i})">✕</button></td>
+    </tr>`;
+  }).join('');
+  updateInv();
+}
+function pickProduct(i,pid){
+  const pr=window._ctx.products.find(x=>x.id==pid);
+  invForm.items[i].productId=pid?+pid:null;
+  if(pr)invForm.items[i].unitPrice=(window._ctx.type==='PURCHASE'||window._ctx.type==='PURCHASE_RETURN')?pr.cost:pr.price;
+  drawInvRows();
+}
+function updItem(i,k,v){invForm.items[i][k]=v;drawInvRows()}
+function delInvRow(i){invForm.items.splice(i,1);if(!invForm.items.length)invForm.items.push({productId:'',quantity:1,unitPrice:0,discount:0});drawInvRows()}
+function addInvRow(){invForm.items.push({productId:'',quantity:1,unitPrice:0,discount:0});drawInvRows()}
+function updateInv(){
+  const sub=+invForm.items.reduce((s,i)=>s+(i.quantity*i.unitPrice-i.discount),0).toFixed(2);
+  const taxable=Math.max(sub-invForm.discount,0);
+  const tax=+(taxable*invForm.taxRate/100).toFixed(2);
+  const total=+(taxable+tax).toFixed(2);
+  const due=+(total-Math.min(invForm.paid,total)).toFixed(2);
+  const $=id=>document.getElementById(id);
+  if($('iv-sub'))$('iv-sub').textContent=sub.toFixed(2);
+  if($('iv-total'))$('iv-total').textContent=total.toFixed(2);
+  if($('iv-due'))$('iv-due').textContent=due.toFixed(2);
+}
+async function saveInvoice(){
+  const err=document.getElementById('inv-err');err.innerHTML='';
+  const items=invForm.items.filter(i=>i.productId);
+  if(!items.length){err.innerHTML='<div class="card" style="background:#fee2e2;color:#991b1b;margin-bottom:12px">أضف صنفًا</div>';return}
+  if(!invForm.warehouseId){err.innerHTML='<div class="card" style="background:#fee2e2;color:#991b1b;margin-bottom:12px">اختر المخزن</div>';return}
+  try{
+    const res=await createInvoice({
+      type:window._ctx.type,
+      partnerId:invForm.partnerId?+invForm.partnerId:null,
+      warehouseId:+invForm.warehouseId,
+      discount:invForm.discount,taxRate:invForm.taxRate,
+      paid:invForm.paid,paymentMethod:invForm.paymentMethod,
+      note:invForm.note,updateCost:invForm.updateCost,
+      items:items.map(i=>({productId:+i.productId,quantity:+i.quantity,unitPrice:+i.unitPrice,discount:+i.discount||0}))
+    });
+    goto('invoice-view',res.id);
+  }catch(e){
+    err.innerHTML=`<div class="card" style="background:#fee2e2;color:#991b1b;margin-bottom:12px">${esc(e.message)}</div>`;
+  }
+}
+
+// ==================== INVOICE VIEW ====================
+async function renderInvoiceView(el){
+  const inv=await req('invoices',state.param);
+  if(!inv){el.innerHTML='<p>الفاتورة غير موجودة</p>';return}
+  const items=(await all('invoice_items')).filter(i=>i.invoiceId===inv.id);
+  const products=Object.fromEntries((await all('products')).map(p=>[p.id,p.name]));
+  const wh=await req('warehouses',inv.warehouseId);
+  const partner=inv.partnerId?(await req(inv.partnerType==='customer'?'customers':'suppliers',inv.partnerId)):null;
+  const typeLabel={SALE:'فاتورة بيع',PURCHASE:'فاتورة شراء',SALE_RETURN:'مرتجع بيع',PURCHASE_RETURN:'مرتجع شراء'}[inv.type];
+  const company=await setting('company','شركتي');
+  el.innerHTML=`<div class="no-print" style="display:flex;gap:10px;margin-bottom:16px">
+    <button class="link" onclick="goto('invoices')">← رجوع</button>
+    <button class="btn primary" onclick="window.print()">🖨️ طباعة</button>
+    ${inv.total-inv.paid>0.01?`<button class="btn success" onclick="openPayModal(${inv.id})">💵 تسجيل دفعة</button>`:''}
+  </div>
+  <div id="pay-modal"></div>
+  <div class="card" style="max-width:820px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;margin-bottom:22px">
+      <div>
+        <div style="font-size:14px;color:#64748b">${esc(company)}</div>
+        <h2 style="margin:6px 0 4px">${typeLabel}</h2>
+        <div class="mono" style="color:#64748b">${esc(inv.number)}</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">${dateTimeStr(inv.created_at)}</div>
+      </div>
+      <div style="text-align:left;font-size:13px">
+        <div><b>${inv.partnerType==='customer'?'العميل':'المورد'}:</b> ${esc(partner?partner.name:'—')}</div>
+        ${partner&&partner.phone?`<div><b>الهاتف:</b> ${esc(partner.phone)}</div>`:''}
+        <div><b>المخزن:</b> ${esc(wh?wh.name:'—')}</div>
+      </div>
+    </div>
+    <table style="margin-bottom:18px">
+      <thead><tr><th>المنتج</th><th style="text-align:center">الكمية</th><th style="text-align:center">السعر</th><th style="text-align:center">خصم</th><th style="text-align:center">الإجمالي</th></tr></thead>
+      <tbody>${items.map(it=>`<tr>
+        <td>${esc(products[it.productId]||'—')}</td>
+        <td class="mono" style="text-align:center">${it.quantity}</td>
+        <td class="mono" style="text-align:center">${money(it.unitPrice)}</td>
+        <td class="mono" style="text-align:center">${money(it.discount)}</td>
+        <td class="mono" style="text-align:center">${money(it.total)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+    <div style="margin-right:auto;max-width:300px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;padding:5px 0"><span>المجموع:</span><span class="mono">${money(inv.subtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0"><span>خصم:</span><span class="mono">${money(inv.discount)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0"><span>ضريبة:</span><span class="mono">${money(inv.tax)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:9px 0;font-weight:700;font-size:17px;border-top:2px solid #0f172a"><span>الإجمالي:</span><span class="mono">${money(inv.total)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0"><span>المدفوع:</span><span class="mono">${money(inv.paid)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;color:#dc2626;font-weight:600"><span>المتبقي:</span><span class="mono">${money(inv.total-inv.paid)}</span></div>
+    </div>
+    ${inv.note?`<p style="margin-top:16px;padding:10px;background:#f8fafc;border-radius:7px;font-size:12px"><b>ملاحظة:</b> ${esc(inv.note)}</p>`:''}
+  </div>`;
+}
+
+function openPayModal(invoiceId){
+  const el=document.getElementById('pay-modal');
+  el.innerHTML=`<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000" onclick="if(event.target===this)closePayModal()">
+    <div class="card" style="width:360px">
+      <h3>تسجيل دفعة</h3>
+      <input id="pay-amt" type="number" step="0.01" placeholder="المبلغ" style="margin-bottom:8px">
+      <select id="pay-method" style="margin-bottom:8px">
+        <option value="CASH">نقدي</option><option value="CARD">بطاقة</option><option value="TRANSFER">تحويل</option>
+      </select>
+      <input id="pay-note" placeholder="ملاحظة (اختياري)" style="margin-bottom:12px">
+      <div style="display:flex;gap:8px">
+        <button class="btn success" style="flex:1" onclick="submitPay(${invoiceId})">حفظ</button>
+        <button class="btn" style="flex:1;background:#e2e8f0" onclick="closePayModal()">إلغاء</button>
+      </div>
+    </div>
+  </div>`;
+}
+function closePayModal(){document.getElementById('pay-modal').innerHTML=''}
+async function submitPay(invoiceId){
+  const amt=+document.getElementById('pay-amt').value;
+  const method=document.getElementById('pay-method').value;
+  const note=document.getElementById('pay-note').value;
+  try{
+    await addPayment(invoiceId,amt,method,note);
+    closePayModal();renderPage();
+  }catch(e){alert(e.message)}
+}
+
+// ==================== PAYMENTS PAGE ====================
+async function renderPaymentsPage(el){
+  const payments=await all('payments');
+  const invoices=await all('invoices');
+  const customers=Object.fromEntries((await all('customers')).map(c=>[c.id,c.name]));
+  const suppliers=Object.fromEntries((await all('suppliers')).map(s=>[s.id,s.name]));
+  const invMap=Object.fromEntries(invoices.map(i=>[i.id,i]));
+  const list=[...payments].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,200);
+  el.innerHTML=`<h2>سجل المدفوعات</h2>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>التاريخ</th><th>الفاتورة</th><th>الطرف</th><th>المبلغ</th><th>الطريقة</th><th>ملاحظة</th></tr></thead>
+    <tbody>${list.length?list.map(p=>{
+      const inv=invMap[p.invoiceId];
+      const name=(p.partnerType==='customer'?customers[p.partnerId]:suppliers[p.partnerId])||'—';
+      const mLabel={CASH:'نقدي',CARD:'بطاقة',TRANSFER:'تحويل'}[p.method]||p.method;
+      return `<tr>
+        <td>${dateStr(p.created_at)}</td>
+        <td class="mono">${esc(inv?.number||'—')}</td>
+        <td>${esc(name)}</td>
+        <td class="mono" style="color:#16a34a">${money(p.amount)}</td>
+        <td><span class="badge badge-blue">${mLabel}</span></td>
+        <td>${esc(p.note)}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">لا مدفوعات</td></tr>'}
+    </tbody></table></div>`;
+}
+
+// ==================== TRANSFERS & ADJUSTMENTS ====================
+async function renderTransfersPage(el){
+  const [warehouses,products,stock]=await Promise.all([all('warehouses'),all('products'),all('stock')]);
+  const activeProducts=products.filter(p=>p.active!==0);
+  window._tr={warehouses,products:activeProducts,stock};
+  el.innerHTML=`<h2>تحويل وتسوية المخزون</h2>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('transfer')">🔄 تحويل بين المخازن</button>
+    <button class="tab" onclick="switchTab('adjust')">🔧 تسوية جرد</button>
+  </div>
+  <div id="tab-content"></div>`;
+  switchTab('transfer');
+}
+function switchTab(t){
+  document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tabs .tab').forEach(x=>{if(x.textContent.includes(t==='transfer'?'تحويل':'تسوية'))x.classList.add('active')});
+  const el=document.getElementById('tab-content');
+  if(t==='transfer') renderTransferForm(el);
+  else renderAdjustForm(el);
+}
+function renderTransferForm(el){
+  const {warehouses,products}=window._tr;
+  window._trf={fromId:warehouses[0]?.id||'',toId:warehouses[1]?.id||'',items:[{productId:'',quantity:1}],note:''};
+  el.innerHTML=`<div class="card form-row" style="margin-bottom:12px">
+    <div><label style="font-size:12px;color:#64748b">من مخزن</label>
+      <select onchange="_trf.fromId=+this.value">${warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div>
+    <div><label style="font-size:12px;color:#64748b">إلى مخزن</label>
+      <select onchange="_trf.toId=+this.value">${warehouses.map(w=>`<option value="${w.id}" ${w.id===warehouses[1]?.id?'selected':''}>${esc(w.name)}</option>`).join('')}</select></div>
+    <div><label style="font-size:12px;color:#64748b">ملاحظة</label>
+      <input oninput="_trf.note=this.value"></div>
+  </div>
+  <div class="card" style="padding:0;margin-bottom:10px"><table>
+    <thead><tr><th>المنتج</th><th>الكمية</th><th></th></tr></thead>
+    <tbody id="tr-rows"></tbody>
+  </table></div>
+  <button class="link" onclick="addTrRow()">➕ إضافة صنف</button>
+  <div style="margin-top:14px"><button class="btn primary" onclick="doTransfer()">تنفيذ التحويل</button></div>`;
+  drawTrRows();
+}
+function drawTrRows(){
+  const tb=document.getElementById('tr-rows');if(!tb)return;
+  const {products,stock}=window._tr;
+  tb.innerHTML=window._trf.items.map((it,i)=>{
+    return `<tr>
+      <td><select onchange="_trf.items[${i}].productId=+this.value;drawTrRows()"><option value="">— اختر —</option>
+        ${products.map(p=>`<option value="${p.id}" ${it.productId==p.id?'selected':''}>${esc(p.name)} (متاح: ${stock.filter(s=>s.productId===p.id&&s.warehouseId===window._trf.fromId).reduce((a,x)=>a+x.quantity,0)})</option>`).join('')}</select></td>
+      <td><input class="w24" type="number" min="0.001" step="0.001" value="${it.quantity}" onchange="_trf.items[${i}].quantity=+this.value"></td>
+      <td><button class="small-btn danger" onclick="_trf.items.splice(${i},1);if(!_trf.items.length)_trf.items.push({productId:0,quantity:1});drawTrRows()">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+function addTrRow(){window._trf.items.push({productId:'',quantity:1});drawTrRows()}
+async function doTransfer(){
+  const items=window._trf.items.filter(i=>i.productId);
+  if(!items.length)return alert('أضف صنفًا');
+  if(window._trf.fromId===window._trf.toId)return alert('اختر مخزنين مختلفين');
+  try{
+    await transferStock(+window._trf.fromId,+window._trf.toId,items,window._trf.note);
+    alert('✅ تم التحويل بنجاح');
+    window._trf.items=[{productId:'',quantity:1}];
+    drawTrRows();
+  }catch(e){alert(e.message)}
+}
+
+function renderAdjustForm(el){
+  const {warehouses,products,stock}=window._tr;
+  window._adj={warehouseId:warehouses[0]?.id||'',productId:'',newQty:0,note:''};
+  el.innerHTML=`<div class="card form-row" style="margin-bottom:12px">
+    <div><label style="font-size:12px;color:#64748b">المخزن</label>
+      <select onchange="_adj.warehouseId=+this.value;drawAdjInfo()">${warehouses.map(w=>`<option value="${w.id}">${esc(w.name)}</option>`).join('')}</select></div>
+    <div><label style="font-size:12px;color:#64748b">المنتج</label>
+      <select onchange="_adj.productId=+this.value;drawAdjInfo()"><option value="">— اختر —</option>
+        ${products.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
+    <div><label style="font-size:12px;color:#64748b">الكمية الفعلية (جرد)</label>
+      <input type="number" step="0.001" value="0" oninput="_adj.newQty=+this.value"></div>
+    <div><label style="font-size:12px;color:#64748b">ملاحظة</label>
+      <input oninput="_adj.note=this.value"></div>
+  </div>
+  <div id="adj-info" class="card" style="margin-bottom:12px;background:#f8fafc"></div>
+  <button class="btn primary" onclick="doAdjust()">تنفيذ التسوية</button>`;
+}
+function drawAdjInfo(){
+  const el=document.getElementById('adj-info');if(!el)return;
+  const {stock}=window._tr;
+  if(!window._adj.productId){el.innerHTML='اختر المنتج لرؤية الرصيد الحالي';return}
+  const cur=stock.filter(s=>s.productId===+window._adj.productId&&s.warehouseId===window._adj.warehouseId).reduce((a,x)=>a+x.quantity,0);
+  el.innerHTML=`<b>الرصيد الحالي:</b> <span class="mono">${cur}</span>`;
+}
+async function doAdjust(){
+  if(!window._adj.productId)return alert('اختر المنتج');
+  try{
+    await adjustStock(+window._adj.productId,+window._adj.warehouseId,+window._adj.newQty,window._adj.note);
+    alert('✅ تم التسوية');
+    renderPage();
+  }catch(e){alert(e.message)}
+}
+
+// ==================== MOVEMENTS PAGE ====================
+async function renderMovementsPage(el){
+  const [movements,products,warehouses]=await Promise.all([all('movements'),all('products'),all('warehouses')]);
+  const pm=Object.fromEntries(products.map(p=>[p.id,p.name]));
+  const wm=Object.fromEntries(warehouses.map(w=>[w.id,w.name]));
+  const list=[...movements].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,300);
+  el.innerHTML=`<h2>حركات المخزون (آخر 300)</h2>
+  <div class="card" style="padding:0"><table>
+    <thead><tr><th>التاريخ</th><th>المنتج</th><th>المخزن</th><th>النوع</th><th>الكمية</th><th>المرجع</th><th>السبب</th></tr></thead>
+    <tbody>${list.length?list.map(m=>{
+      const tBadge={IN:'<span class="badge badge-green">إدخال</span>',OUT:'<span class="badge badge-red">إخراج</span>',ADJUST:'<span class="badge badge-yellow">تسوية</span>'}[m.type]||m.type;
+      return `<tr>
+        <td>${dateStr(m.created_at)}</td>
+        <td>${esc(pm[m.productId]||'—')}</td>
+        <td>${esc(wm[m.warehouseId]||'—')}</td>
+        <td>${tBadge}</td>
+        <td class="mono">${m.quantity}</td>
+        <td class="mono">${esc(m.reference)}</td>
+        <td><span class="badge badge-gray">${m.reason||'—'}</span></td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">لا حركات</td></tr>'}
+    </tbody></table></div>`;
+}
+
+// ==================== REPORTS ====================
+async function renderReports(el){
+  const from=state.param?.from||today().slice(0,8)+'01';
+  const to=state.param?.to||today();
+  el.innerHTML=`<h2>التقارير المتقدمة</h2>
+  <div class="card form-row" style="margin-bottom:14px">
+    <div><label style="font-size:12px;color:#64748b">من</label>
+      <input id="r-from" type="date" value="${from}"></div>
+    <div><label style="font-size:12px;color:#64748b">إلى</label>
+      <input id="r-to" type="date" value="${to}"></div>
+    <button class="btn primary" onclick="state.param={from:document.getElementById('r-from').value,to:document.getElementById('r-to').value};renderPage()">تحديث</button>
+  </div>
+  <div id="r-body">جاري التحميل…</div>`;
+  const d=await getReport(from,to);
+  document.getElementById('r-body').innerHTML=`
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card"><div class="stat-label">الإيرادات</div><div class="stat-value mono">${money(d.revenue)}</div></div>
+    <div class="card"><div class="stat-label">تكلفة المبيعات</div><div class="stat-value mono" style="color:#dc2626">${money(d.cogs)}</div></div>
+    <div class="card"><div class="stat-label">الربح</div><div class="stat-value mono" style="color:#16a34a">${money(d.profit)}</div></div>
+    <div class="card"><div class="stat-label">المشتريات</div><div class="stat-value mono" style="color:#d97706">${money(d.purchases)}</div></div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card"><h3>🏆 أفضل 10 منتجات</h3>
+      ${d.topProducts.length?d.topProducts.map((p,i)=>`
+        <div class="pivot-row">
+          <div>${i+1}. ${esc(p.name)}</div>
+          <div><div class="bar" style="width:${(p.revenue/d.topProducts[0].revenue*100).toFixed(0)}%"></div></div>
+          <div class="mono">${money(p.revenue)}</div>
+        </div>`).join(''):'<p style="color:#94a3b8">لا بيانات</p>'}
+    </div>
+    <div class="card"><h3>👥 أفضل 10 عملاء</h3>
+      ${d.topCustomers.length?d.topCustomers.map((c,i)=>`
+        <div class="pivot-row">
+          <div>${i+1}. ${esc(c.name)}</div>
+          <div><div class="bar" style="width:${(c.total/d.topCustomers[0].total*100).toFixed(0)}%;background:#16a34a"></div></div>
+          <div class="mono">${money(c.total)}</div>
+        </div>`).join(''):'<p style="color:#94a3b8">لا بيانات</p>'}
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card"><h3>⏰ أعمار الديون (مستحقات لنا)</h3>
+      <table><tbody>
+        <tr><td>0-30 يوم</td><td class="mono" style="text-align:left">${money(d.aging.a30)}</td></tr>
+        <tr><td>31-60 يوم</td><td class="mono" style="text-align:left">${money(d.aging.a60)}</td></tr>
+        <tr><td>61-90 يوم</td><td class="mono" style="text-align:left">${money(d.aging.a90)}</td></tr>
+        <tr><td>أكثر من 90</td><td class="mono" style="text-align:left;color:#dc2626">${money(d.aging.a90p)}</td></tr>
+        <tr style="background:#f8fafc"><td><b>الإجمالي</b></td><td class="mono" style="text-align:left"><b>${money(d.aging.a30+d.aging.a60+d.aging.a90+d.aging.a90p)}</b></td></tr>
+      </tbody></table>
+    </div>
+    <div class="card"><h3>🏪 قيمة المخزون حسب المخزن</h3>
+      ${d.inventoryByWarehouse.length?d.inventoryByWarehouse.map(w=>`
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9">
+          <span>${esc(w.name)}</span>
+          <span class="mono">${money(w.value)}</span>
+        </div>`).join(''):'<p style="color:#94a3b8">لا بيانات</p>'}
+    </div>
+  </div>
+
+  <div class="card"><h3>⚠️ منتجات تحت حد إعادة الطلب</h3>
+    ${d.lowStock.length?`<table><thead><tr><th>المنتج</th><th>الرصيد</th><th>الحد</th></tr></thead><tbody>
+      ${d.lowStock.map(p=>`<tr><td>${esc(p.name)}</td><td class="mono"><span class="badge badge-red">${p.stock}</span></td><td class="mono">${p.reorder}</td></tr>`).join('')}
+    </tbody></table>`:'<p style="color:#16a34a">✓ لا تنبيهات</p>'}
+  </div>`;
+}
+
+// ==================== SETTINGS ====================
+async function renderSettings(el){
+  const company=await setting('company','');
+  const currency=await setting('currency','ج.م');
+  el.innerHTML=`<h2>الإعدادات</h2>
+  <div class="card" style="margin-bottom:14px;max-width:520px">
+    <h3>بيانات الشركة</h3>
+    <label style="font-size:12px;color:#64748b">اسم الشركة</label>
+    <input id="s-company" value="${esc(company)}" style="margin:6px 0 10px">
+    <label style="font-size:12px;color:#64748b">العملة</label>
+    <input id="s-currency" value="${esc(currency)}" style="margin:6px 0 10px">
+    <button class="btn primary" onclick="saveCompany()">حفظ</button>
+  </div>
+  <div class="card" style="margin-bottom:14px;max-width:520px">
+    <h3>تغيير كلمة المرور</h3>
+    <input id="s-pass" type="password" placeholder="كلمة المرور الجديدة" style="margin:6px 0">
+    <button class="btn primary" onclick="savePass()">تغيير</button>
+  </div>
+  <div class="card" style="margin-bottom:14px;max-width:520px">
+    <h3 style="color:#dc2626">النسخ الاحتياطي</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:10px">صدّر بياناتك لملف JSON احفظه في مكان آمن.</p>
+    <button class="btn primary" onclick="backup()">💾 تصدير نسخة</button>
+    <input id="restore-file" type="file" accept=".json" style="display:none" onchange="restore(this.files[0])">
+    <button class="btn danger" onclick="document.getElementById('restore-file').click()">📂 استيراد نسخة</button>
+  </div>
+  <div class="card" style="max-width:520px">
+    <h3>معلومات</h3>
+    <p style="font-size:13px;color:#64748b">عدد المنتجات: ${(await all('products')).filter(p=>p.active!==0).length}<br>
+    عدد الفواتير: ${(await all('invoices')).length}<br>
+    عدد الحركات: ${(await all('movements')).length}</p>
+  </div>`;
+}
+async function saveCompany(){
+  await setSetting('company',document.getElementById('s-company').value);
+  await setSetting('currency',document.getElementById('s-currency').value);
+  alert('✅ تم الحفظ');
+}
+async function savePass(){
+  const v=document.getElementById('s-pass').value;
+  if(v.length<3)return alert('كلمة المرور قصيرة');
+  await changePass(v);
+  alert('✅ تم تغيير كلمة المرور');
+}
+async function backup(){
+  const data={};
+  for(const s of ['settings','warehouses','products','customers','suppliers','invoices','invoice_items','payments','movements','stock']){
+    data[s]=await all(s);
+  }
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='wms-backup-'+today()+'.json';a.click();
+}
+async function restore(file){
+  if(!file)return;
+  if(!confirm('سيتم استبدال كل البيانات. متابعة؟'))return;
+  const data=JSON.parse(await file.text());
+  for(const s of Object.keys(data)){
+    await new Promise(res=>{const tx=db.transaction(s,'readwrite');tx.objectStore(s).clear();tx.oncomplete=res});
+    for(const row of data[s])
+      await new Promise(res=>{const tx=db.transaction(s,'readwrite');tx.objectStore(s).put(row);tx.oncomplete=res});
+  }
+  alert('✅ تم الاستيراد');location.reload();
+}
+
+// ==================== BOOT ====================
+(async()=>{
+  try{
+    await openDB();
+    await seed();
+    render();
+  }catch(e){
+    document.body.innerHTML='<p style="padding:40px;color:red">خطأ: '+e.message+'</p>';
+  }
+})();
+</script>
+</body>
+</html>
+```
+
+---
